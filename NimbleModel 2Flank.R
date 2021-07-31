@@ -25,6 +25,6 @@ NimModel <- nimbleCode({
     y.R.true[i,1:J,1:K] ~ dBernoulliVectorSingle(pd.R[i,1:J],K2D=K2D[1:J,1:K],z=z[i])
   }
   #have to trick Nimble to know ID is part of model by using it somewhere in model statement
-  IDdummy <- IDdummyfun(ID.L=ID.L[1:n.L],ID.R=ID.R[1:n.R])
+  IDdummy <- IDdummyfun(ID.L=ID.L[1:n.L])
   N <- sum(z[1:M])
 })# end model

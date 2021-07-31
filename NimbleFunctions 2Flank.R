@@ -1,5 +1,5 @@
 IDdummyfun <- nimbleFunction(
-  run = function(ID.L=double(1),ID.R=double(1)){ 
+  run = function(ID.L=double(1)){ 
     returnType(double(0))
     return(0)
   }
