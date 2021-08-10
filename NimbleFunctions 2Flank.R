@@ -1,5 +1,5 @@
 IDdummyfun <- nimbleFunction(
-  run = function(ID.L=double(1)){ 
+  run = function(ID.L=double(1),ID.R=double(1)){ 
     returnType(double(0))
     return(0)
   }
@@ -15,6 +15,8 @@ GetD2 <- nimbleFunction(
     }
   }
 )
+#make pd 3D here and in PMF functions if adding occasion effects to model. 
+#Must modify custom ID updates to reflect this change.
 GetDetectionProb <- nimbleFunction(
   run = function(d2=double(1), p0=double(0),sigma=double(0), z=double(0)){ 
     returnType(double(1))
@@ -51,7 +53,7 @@ dBernoulliVectorBoth <- nimbleFunction(
     }
   }
 )
-dBernoulliVectorSingle <- nimbleFunction( #don't need to use ID, but nimble must think it is necessary somewhere in model structure
+dBernoulliVectorSingle <- nimbleFunction(
   run = function(x = double(2), pd=double(1), K2D=double(2), z = double(0),log = integer(0)) {
     returnType(double(0))
     if(z==0){
@@ -77,7 +79,7 @@ dBernoulliVectorSingle <- nimbleFunction( #don't need to use ID, but nimble must
     }
   }
 )
-#dummy function
+#dummy function to make this work in parallel
 rBernoulliVectorBoth <- nimbleFunction(
   run = function(n=integer(0),pd=double(1), K2D=double(2), z = double(0)) {
     returnType(double(2))
@@ -87,7 +89,7 @@ rBernoulliVectorBoth <- nimbleFunction(
     return(y.true)
   }
 )
-#dummy function
+#dummy function to make this work in parallel
 rBernoulliVectorSingle <- nimbleFunction(
   run = function(n=integer(0),pd=double(1), K2D=double(2), z = double(0)) {
     returnType(double(2))
@@ -98,13 +100,14 @@ rBernoulliVectorSingle <- nimbleFunction(
   }
 )
 
+#Left flank update
 IDLSampler <- nimbleFunction(
   contains = sampler_BASE,
   setup = function(model, mvSaved, target, control) {
     K2D <- control$K2D
     n.L <- control$n.L
     n.fixed <- control$n.fixed
-    prop.scale <- control$prop.scale
+    prop.scale <- control$prop.scale #can scale the distance proposal, but a value of 1 should be a good choice.
     calcNodes <- model$getDependencies(target)
   },
   run = function() {
@@ -114,10 +117,11 @@ IDLSampler <- nimbleFunction(
       y.L.true <- model$y.L.true
       ID.L<- model$ID.L
       pd.L <- model$pd.L
+      sigma <- model$sigma
       M <- nimDim(y.L.true)[1]
       J <- nimDim(y.L.true)[2]
       K <- nimDim(y.L.true)[3]
-
+      
       #precalculate log likelihoods. Can pull from nimble, but structure depends on nimble model structure (vectorized or not)
       ll.y.L <- array(0,dim=c(M,J,K))
       for(i in 1:M){
@@ -139,51 +143,54 @@ IDLSampler <- nimbleFunction(
         this.i=ID.L[l]
         #select an individual to swap it to
         d2=(s[this.i,1]-s[,1])^2+(s[this.i,2]-s[,2])^2
-        propprobs=exp(-d2/(2*(prop.scale*model$sigma)^2)) #distance-based proposal
+        propprobs=exp(-d2/(2*(prop.scale*sigma[1])^2)) #distance-based proposal. must reference index for sigma
         propprobs[this.i]=0 #don't choose focal
         propprobs[z==0]=0 #must select an individual with z==1
-        propprobs[1:n.fixed]=0 #cannot select an individual with fixed flanks
+        if(n.fixed>0){
+          propprobs[1:n.fixed]=0 #cannot select an individual with fixed flanks
+        }
         propprobs=propprobs/sum(propprobs)
-        cand.i=rcat(1,propprobs)
-        if(this.i!=cand.i){ #trying this, can choose yourself
-          cand.ID.idx=which(ID.L==cand.i)#which ID.L index is this individual. Will be empty if not in ID.L
-          y.L.true.cand[this.i,,] <- y.L.true[cand.i,,]
-          y.L.true.cand[cand.i,,] <- y.L.true[this.i,,]
-          #update ll.y.L
-          for(j in 1:J){
-            for(k in 1:K){
-              if(K2D[j,k]==1){
-                ll.y.L.cand[this.i,j,k]=dbinom(y.L.true.cand[this.i,j,k],prob=pd.L[this.i,j],size=1,log=TRUE)
-                ll.y.L.cand[cand.i,j,k]=dbinom(y.L.true.cand[cand.i,j,k],prob=pd.L[cand.i,j],size=1,log=TRUE)
-              }else if(K2D[j,k]==2){
-                ll.y.L.cand[this.i,j,k]=dbinom(y.L.true.cand[this.i,j,k],prob=2*pd.L[this.i,j]-pd.L[this.i,j]^2,size=1,log=TRUE)
-                ll.y.L.cand[cand.i,j,k]=dbinom(y.L.true.cand[cand.i,j,k],prob=2*pd.L[cand.i,j]-pd.L[cand.i,j]^2,size=1,log=TRUE)
-              }
+        cand.i=rcat(1,prob=propprobs)
+        
+        cand.ID.idx=which(ID.L==cand.i)#which ID.L index is this individual. Will be empty if not in ID.L
+        y.L.true.cand[this.i,,] <- y.L.true[cand.i,,]
+        y.L.true.cand[cand.i,,] <- y.L.true[this.i,,]
+        #update ll.y.L
+        for(j in 1:J){
+          for(k in 1:K){
+            if(K2D[j,k]==1){
+              ll.y.L.cand[this.i,j,k]=dbinom(y.L.true.cand[this.i,j,k],prob=pd.L[this.i,j],size=1,log=TRUE)
+              ll.y.L.cand[cand.i,j,k]=dbinom(y.L.true.cand[cand.i,j,k],prob=pd.L[cand.i,j],size=1,log=TRUE)
+            }else if(K2D[j,k]==2){
+              ll.y.L.cand[this.i,j,k]=dbinom(y.L.true.cand[this.i,j,k],prob=2*pd.L[this.i,j]-pd.L[this.i,j]^2,size=1,log=TRUE)
+              ll.y.L.cand[cand.i,j,k]=dbinom(y.L.true.cand[cand.i,j,k],prob=2*pd.L[cand.i,j]-pd.L[cand.i,j]^2,size=1,log=TRUE)
             }
           }
-          #calculate backwards proposal probs
-          d2=(s[cand.i,1]-s[,1])^2+(s[cand.i,2]-s[,2])^2
-          backprobs=exp(-d2/(2*(prop.scale*model$sigma)^2)) #distance-based proposal
-          backprobs[cand.i]=0 #don't choose focal
-          backprobs[z==0]=0 #must select an individual with z==1
+        }
+        #calculate backwards proposal probs
+        d2=(s[cand.i,1]-s[,1])^2+(s[cand.i,2]-s[,2])^2
+        backprobs=exp(-d2/(2*(prop.scale*sigma[1])^2)) #distance-based proposal
+        backprobs[cand.i]=0 #don't choose focal
+        backprobs[z==0]=0 #must select an individual with z==1
+        if(n.fixed>0){
           backprobs[1:n.fixed]=0 #cannot select an individual with fixed flanks
-          backprobs=backprobs/sum(backprobs)
-          lp_initial <- sum(ll.y.L[this.i,,])+sum(ll.y.L[cand.i,,])
-          lp_proposed <- sum(ll.y.L.cand[this.i,,])+sum(ll.y.L.cand[cand.i,,])
-          log_MH_ratio <- (lp_proposed+log(backprobs[this.i])) - (lp_initial+log(propprobs[cand.i]))
-          accept <- decide(log_MH_ratio)
-          if(accept){
-            y.L.true[this.i,,]=y.L.true.cand[this.i,,]
-            y.L.true[cand.i,,]=y.L.true.cand[cand.i,,]
-            ll.y.L[this.i,,]=ll.y.L.cand[this.i,,]
-            ll.y.L[cand.i,,]=ll.y.L.cand[cand.i,,]
-            #swap flank indices
-            ID.L[l]=cand.i
-            #if cand.i was in ID.L, update this ID index
-            tmp=nimDim(cand.ID.idx)[1]
-            if(tmp>0){
-              ID.L[cand.ID.idx]=this.i
-            }
+        }
+        backprobs=backprobs/sum(backprobs)
+        lp_initial <- sum(ll.y.L[this.i,,])+sum(ll.y.L[cand.i,,])
+        lp_proposed <- sum(ll.y.L.cand[this.i,,])+sum(ll.y.L.cand[cand.i,,])
+        log_MH_ratio <- (lp_proposed+log(backprobs[this.i])) - (lp_initial+log(propprobs[cand.i]))
+        accept <- decide(log_MH_ratio)
+        if(accept){
+          y.L.true[this.i,,]=y.L.true.cand[this.i,,]
+          y.L.true[cand.i,,]=y.L.true.cand[cand.i,,]
+          ll.y.L[this.i,,]=ll.y.L.cand[this.i,,]
+          ll.y.L[cand.i,,]=ll.y.L.cand[cand.i,,]
+          #swap flank indices
+          ID.L[l]=cand.i
+          #if cand.i was in ID.L, update this ID index
+          tmp=nimDim(cand.ID.idx)[1]
+          if(tmp>0){
+            ID.L[cand.ID.idx]=this.i
           }
         }
       }
@@ -191,6 +198,109 @@ IDLSampler <- nimbleFunction(
       #put everything back into model$stuff
       model$y.L.true <<- y.L.true
       model$ID.L <<- ID.L
+      model$calculate(calcNodes) #update logprob
+      copy(from = model, to = mvSaved, row = 1, nodes = calcNodes, logProb = TRUE)
+    }
+  },
+  methods = list( reset = function () {} )
+)
+
+#Right flank update
+IDRSampler <- nimbleFunction(
+  contains = sampler_BASE,
+  setup = function(model, mvSaved, target, control) {
+    K2D <- control$K2D
+    n.R <- control$n.R
+    n.fixed <- control$n.fixed
+    prop.scale <- control$prop.scale
+    calcNodes <- model$getDependencies(target)
+  },
+  run = function() {
+    if(n.R>0){ #skip if no lefts
+      z <- model$z
+      s <- model$s
+      y.R.true <- model$y.R.true
+      ID.R<- model$ID.R
+      pd.R <- model$pd.R
+      M <- nimDim(y.R.true)[1]
+      J <- nimDim(y.R.true)[2]
+      K <- nimDim(y.R.true)[3]
+      sigma <- model$sigma
+      #precalculate log likelihoods. Can pull from nimble, but structure depends on nimble model structure (vectorized or not)
+      ll.y.R <- array(0,dim=c(M,J,K))
+      for(i in 1:M){
+        if(z[i]==1){
+          for(j in 1:J){
+            for(k in 1:K){
+              if(K2D[j,k]==1){
+                ll.y.R[i,j,k]=dbinom(y.R.true[i,j,k],prob=pd.R[i,j],size=1,log=TRUE)
+              }else if(K2D[j,k]==2){
+                ll.y.R[i,j,k]=dbinom(y.R.true[i,j,k],prob=2*pd.R[i,j]-pd.R[i,j]^2,size=1,log=TRUE)
+              }
+            }
+          }
+        }
+      }
+      ll.y.R.cand <- ll.y.R
+      for(l in (n.fixed+1):n.R){
+        y.R.true.cand <- y.R.true
+        this.i=ID.R[l]
+        #select an individual to swap it to
+        d2=(s[this.i,1]-s[,1])^2+(s[this.i,2]-s[,2])^2
+        propprobs=exp(-d2/(2*(prop.scale*sigma[1])^2)) #distance-based proposal
+        propprobs[this.i]=0 #don't choose focal
+        propprobs[z==0]=0 #must select an individual with z==1
+        if(n.fixed>0){
+          propprobs[1:n.fixed]=0 #cannot select an individual with fixed flanks
+        }
+        propprobs=propprobs/sum(propprobs)
+        cand.i=rcat(1,propprobs)
+        cand.ID.idx=which(ID.R==cand.i)#which ID.R index is this individual. Will be empty if not in ID.R
+        y.R.true.cand[this.i,,] <- y.R.true[cand.i,,]
+        y.R.true.cand[cand.i,,] <- y.R.true[this.i,,]
+        #update ll.y.R
+        for(j in 1:J){
+          for(k in 1:K){
+            if(K2D[j,k]==1){
+              ll.y.R.cand[this.i,j,k]=dbinom(y.R.true.cand[this.i,j,k],prob=pd.R[this.i,j],size=1,log=TRUE)
+              ll.y.R.cand[cand.i,j,k]=dbinom(y.R.true.cand[cand.i,j,k],prob=pd.R[cand.i,j],size=1,log=TRUE)
+            }else if(K2D[j,k]==2){
+              ll.y.R.cand[this.i,j,k]=dbinom(y.R.true.cand[this.i,j,k],prob=2*pd.R[this.i,j]-pd.R[this.i,j]^2,size=1,log=TRUE)
+              ll.y.R.cand[cand.i,j,k]=dbinom(y.R.true.cand[cand.i,j,k],prob=2*pd.R[cand.i,j]-pd.R[cand.i,j]^2,size=1,log=TRUE)
+            }
+          }
+        }
+        #calculate backwards proposal probs
+        d2=(s[cand.i,1]-s[,1])^2+(s[cand.i,2]-s[,2])^2
+        backprobs=exp(-d2/(2*(prop.scale*sigma[1])^2)) #distance-based proposal
+        backprobs[cand.i]=0 #don't choose focal
+        backprobs[z==0]=0 #must select an individual with z==1
+        if(n.fixed>0){
+          backprobs[1:n.fixed]=0 #cannot select an individual with fixed flanks
+        }
+        backprobs=backprobs/sum(backprobs)
+        lp_initial <- sum(ll.y.R[this.i,,])+sum(ll.y.R[cand.i,,])
+        lp_proposed <- sum(ll.y.R.cand[this.i,,])+sum(ll.y.R.cand[cand.i,,])
+        log_MH_ratio <- (lp_proposed+log(backprobs[this.i])) - (lp_initial+log(propprobs[cand.i]))
+        accept <- decide(log_MH_ratio)
+        
+        if(accept){
+          y.R.true[this.i,,]=y.R.true.cand[this.i,,]
+          y.R.true[cand.i,,]=y.R.true.cand[cand.i,,]
+          ll.y.R[this.i,,]=ll.y.R.cand[this.i,,]
+          ll.y.R[cand.i,,]=ll.y.R.cand[cand.i,,]
+          #swap flank indices
+          ID.R[l]=cand.i
+          #if cand.i was in ID.R, update this ID index
+          tmp=nimDim(cand.ID.idx)[1]
+          if(tmp>0){
+            ID.R[cand.ID.idx]=this.i
+          }
+        }
+      }
+      #put everything back into model$stuff
+      model$y.R.true <<- y.R.true
+      model$ID.R <<- ID.R
       model$calculate(calcNodes) #update logprob
       copy(from = model, to = mvSaved, row = 1, nodes = calcNodes, logProb = TRUE)
     }

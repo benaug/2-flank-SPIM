@@ -2,12 +2,13 @@ NimModel <- nimbleCode({
   #detection function priors
   p0B~dunif(0,1)
   #if you do not want to share p0L and p0R
-  p0L~dunif(0,1)
-  p0R~dunif(0,1)
-  # #if you want to share p0L and R
-  # p0S ~ dunif(0,1)
-  # p0L <- p0S
-  # p0R <- p0S
+  # p0L~dunif(0,1)
+  # p0R~dunif(0,1)
+  # #if you want to share p0L and p0R
+  p0S ~ dunif(0,1)
+  p0L <- p0S
+  p0R <- p0S
+  #Make sure upper bound on sigma uniform prior is appropriate
   sigma~dunif(0,20)
   #data augmentation prior
   psi~dunif(0,1)
@@ -25,6 +26,6 @@ NimModel <- nimbleCode({
     y.R.true[i,1:J,1:K] ~ dBernoulliVectorSingle(pd.R[i,1:J],K2D=K2D[1:J,1:K],z=z[i])
   }
   #have to trick Nimble to know ID is part of model by using it somewhere in model statement
-  IDdummy <- IDdummyfun(ID.L=ID.L[1:n.L])
+  IDdummy <- IDdummyfun(ID.L=ID.L[1:n.L],ID.R=ID.R[1:n.R])
   N <- sum(z[1:M])
 })# end model

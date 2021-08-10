@@ -5,8 +5,7 @@ e2dist<-function (x, y){
 }
 
 sim2flank<-
-  function(N=NA,p0L=NA,p0R=NA,p0B=NA,sigma=NA,K=NA,X=X,buff=NA,K2D=NA){
-    library(abind)
+  function(N=NA,p0L=NA,p0R=NA,p0B=NA,sigma=NA,K=NA,X=X,buff=NA,K2D=NA,n.fixed=NA){
     J<- nrow(X)
     # simulate a population of activity centers
     s=cbind(runif(N, min(X[,1])-buff,max(X[,1])+buff), runif(N,min(X[,2])-buff,max(X[,2])+buff))
@@ -30,20 +29,31 @@ sim2flank<-
     
     ######Process data#############
     ID.B=which(apply(y.B,1,sum)>0)
+    n.B=length(ID.B)
     ID.L=which(rowSums(y.L)>0)
     ID.R=which(rowSums(y.R)>0)
     ID.L=setdiff(ID.L,ID.B)
     ID.R=setdiff(ID.R,ID.B)
     ID.L=c(ID.B,ID.L)
     ID.R=c(ID.B,ID.R)
+    if(!is.na(n.fixed)){
+      if(n.fixed<n.B){
+        print("More both-side captured individuals than n.fixed. Changing n.fixed to n.B")
+        n.fixed=n.B
+      }
+      #add uncaptured but known left and right flanks
+      ID.L=sort(unique(c(ID.L,1:n.fixed)))
+      ID.R=sort(unique(c(ID.R,1:n.fixed)))
+    }
+    
     
     Nknown=length(ID.B)
     n=sum(apply(y.B+y.L+y.R,1,sum)>0)
     
     #remove uncaptured individuals, put ID.B at top of y.L and y.R
     y.B.obs=y.B[ID.B,,]
-    y.L.obs=y.L[c(ID.L),,]
-    y.R.obs=y.R[c(ID.R),,]
+    y.L.obs=y.L[ID.L,,]
+    y.R.obs=y.R[ID.R,,]
     n.B=length(ID.B)
     n.L=length(ID.L)
     n.R=length(ID.R)
@@ -56,9 +66,11 @@ sim2flank<-
     if(n.R==1){
       y.R.obs=array(y.R.obs,dim=c(1,J,K))
     }
-    
+    if(is.na(n.fixed)){
+      n.fixed=n.B
+    }
     out<-list(y.B.obs=y.B.obs,y.L.obs=y.L.obs,y.R.obs=y.R.obs,X=X,K=K,buff=buff,
-              y.B=y.B,y.L=y.L,y.R=y.R,s=s,n=n,ID.B=ID.B,ID.L=ID.L,ID.R=ID.R)
+              y.B=y.B,y.L=y.L,y.R=y.R,s=s,n=n,ID.B=ID.B,ID.L=ID.L,ID.R=ID.R,n.fixed=n.fixed)
 
     return(out)
   }
