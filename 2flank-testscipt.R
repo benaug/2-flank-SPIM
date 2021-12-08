@@ -38,6 +38,10 @@ library(nimble)
 source("NimbleModel 2Flank.R")
 source("NimbleFunctions 2Flank.R")
 
+#make sure to run this line!
+nimble:::setNimbleOption('MCMCjointlySamplePredictiveBranches', FALSE)
+nimbleOptions('MCMCjointlySamplePredictiveBranches') 
+
 N=50
 p0L=0.13
 p0R=0.13
