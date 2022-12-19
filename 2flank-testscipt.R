@@ -38,9 +38,8 @@ library(nimble)
 source("NimbleModel 2Flank.R")
 source("NimbleFunctions 2Flank.R")
 
-#make sure to run this line!
-nimble:::setNimbleOption('MCMCjointlySamplePredictiveBranches', FALSE)
-nimbleOptions('MCMCjointlySamplePredictiveBranches') 
+#Use Nimble version 0.13.1 and you must run this line 
+nimbleOptions(determinePredictiveNodesInModel = FALSE)
 
 N=50
 p0L=0.13
@@ -152,7 +151,7 @@ conf$addSampler(target = paste0("y.R.true[1:",M,",1:",J,",1:",K,"]"),
 conf$removeSampler(paste("s[1:",M,", 1:2]", sep=""))
 for(i in 1:M){
   conf$addSampler(target = paste("s[",i,", 1:2]", sep=""), #do not adapt covariance bc s's not deterministically linked to individuals
-                  type = 'RW_block',control=list(adaptive=TRUE,adaptScaleOnly=TRUE,adaptInterval=500),silent = TRUE)
+                  type = 'RW_block',control=list(adaptive=TRUE,adaptScaleOnly=TRUE),silent = TRUE)
 }
 
 #AF slice update can improve mixing substantially when strong covariance between p0x and sigma
@@ -230,5 +229,6 @@ n.match=rep(NA,nrow(postL)-1)
 for(i in 2:nrow(postL)){
   n.match[i]=sum(postL[i,]%in%postR[i,])
 }
-n.match
-sum(data$ID.L%in%data$ID.R)
+plot(mcmc(n.match[-1]))
+sum(data$ID.L%in%data$ID.R) #truth
+
