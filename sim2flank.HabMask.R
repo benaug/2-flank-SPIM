@@ -4,11 +4,28 @@ e2dist<-function (x, y){
   matrix(dvec, nrow = nrow(x), ncol = nrow(y), byrow = F)
 }
 
-sim2flank<-
-  function(N=NA,p0L=NA,p0R=NA,p0B=NA,sigma=NA,K=NA,X=X,buff=NA,K2D=NA,n.fixed=NA){
+sim2flank.HabMask<-
+  function(N=NA,p0L=NA,p0R=NA,p0B=NA,sigma=NA,K=NA,X=X,buff=NA,K2D=NA,n.fixed=NA,
+           grid.objects=grid.objects){
     J <- nrow(X)
     # simulate a population of activity centers
     s <- cbind(runif(N, min(X[,1])-buff,max(X[,1])+buff), runif(N,min(X[,2])-buff,max(X[,2])+buff))
+    
+    # simulate a population of activity centers
+    #chose cells first at random
+    s.cell <- sample(which(grid.objects$InSS==1),N,replace=TRUE)
+    #assign spatial uniform location inside selected cell
+    s <- matrix(NA,N,2)
+    s.xlim <- s.ylim <- matrix(NA,N,2)
+    for(i in 1:N){
+      s.xlim[i,1] <- grid.objects$dSS[s.cell[i],1]-res/2
+      s.xlim[i,2] <- grid.objects$dSS[s.cell[i],1]+res/2
+      s.ylim[i,1] <- grid.objects$dSS[s.cell[i],2]-res/2
+      s.ylim[i,2] <- grid.objects$dSS[s.cell[i],2]+res/2
+      s[i,] <- cbind(runif(1,s.xlim[i,1],s.xlim[i,2]),
+                     runif(1,s.ylim[i,1],s.ylim[i,2]))
+    }
+    
     #capture individuals
     D <- e2dist(s,X)
     expstuff <- exp(-D*D/(2*sigma*sigma))
@@ -70,7 +87,8 @@ sim2flank<-
       n.fixed <- n.B
     }
     out <-list(y.B.obs=y.B.obs,y.L.obs=y.L.obs,y.R.obs=y.R.obs,X=X,K=K,buff=buff,
-              y.B=y.B,y.L=y.L,y.R=y.R,s=s,n=n,ID.B=ID.B,ID.L=ID.L,ID.R=ID.R,n.fixed=n.fixed)
+              y.B=y.B,y.L=y.L,y.R=y.R,s=s,s.cell=s.cell,n=n,ID.B=ID.B,ID.L=ID.L,ID.R=ID.R,n.fixed=n.fixed,
+              grid.objects=grid.objects)
 
     return(out)
   }
