@@ -17,6 +17,9 @@ NimModel <- nimbleCode({
     z[i] ~ dbern(psi)
     s[i,1] ~ dunif(xlim[1],xlim[2])
     s[i,2] ~ dunif(ylim[1],ylim[2])
+    s.cell[i] <- cells[trunc(s[i,1]/res)+1,trunc(s[i,2]/res)+1] #extract activity center cell
+    #categorical activity center likelihood for this cell, equivalent to zero's trick
+    dummy.data[i] ~ dCell(InSS[s.cell[i]])
     d2[i,1:J] <- GetD2(s = s[i,1:2], X = X[1:J,1:2],z=z[i])
     pd.B[i,1:J] <- GetDetectionProb(p0=p0B,sigma=sigma,d2=d2[i,1:J],z=z[i])
     pd.L[i,1:J] <- GetDetectionProb(p0=p0L,sigma=sigma,d2=d2[i,1:J],z=z[i])

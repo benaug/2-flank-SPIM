@@ -37,30 +37,33 @@ source("LRmatch.R")
 library(nimble)
 source("NimbleModel 2Flank.R")
 source("NimbleFunctions 2Flank.R")
+source("sSampler.R")
 
-#Use Nimble version 0.13.1 and you must run this line 
+#If using Nimble version 0.13.1 and you must run this line 
 nimbleOptions(determinePredictiveNodesInModel = FALSE)
+# #If using Nimble before version 0.13.1, run this line instead
+# nimble:::setNimbleOption('MCMCjointlySamplePredictiveBranches', FALSE)
 
-N=50
-p0L=0.13
-p0R=0.13
-p0B=0.2
-sigma=0.50
-K=10
-buff=2 #should be 3sigma or greater (at least for real data, unless using a habitat mask)
-X<- expand.grid(3:8,3:8) #make some traps
-J=nrow(X)
+N <- 50
+p0L <- 0.13
+p0R <- 0.13
+p0B <- 0.2
+sigma <- 0.50
+K <- 10
+buff <- 2 #should be 3sigma or greater (at least for real data, unless using a habitat mask)
+X <- expand.grid(3:8,3:8) #make some traps
+J <- nrow(X)
 #J x K indicator for number of cameras operable 
-K2D=matrix(1,nrow=J,ncol=K) #start with all single cam stations
-# K2D[c(1,5,10,15,20,25,30,35),1:10]=2 #create some dual cam stations (or could leave all single)
+K2D <- matrix(1,nrow=J,ncol=K) #start with all single cam stations
+# K2D[c(1,5,10,15,20,25,30,35),1:10] <- 2 #create some dual cam stations (or could leave all single)
 #If you have no trap-occasions with 2 cams, data simulator assumes no flanks can be deterministically linked.
 
 #You may know some flank linkages without both-side captures. If NA, we assume we do not.
-# n.fixed=5 #minimum number of matched flanks for simulation
-n.fixed=NA #supply NA for only n.B flank matches to be known (if there are any).
-#must supply this for simulation so we know to retain left and right known flanks with no captures
-data=sim2flank(N=N,p0L=p0L,p0R=p0R,p0B=p0B,sigma=sigma,K=K,X=X,buff=buff,K2D=K2D,n.fixed=n.fixed)
-n.fixed=data$n.fixed #update in case n.B > n.fixed (n.B is number of both-side captured individuals)
+# n.fixed <- 5 #minimum number of matched flanks for simulation
+n.fixed <- NA #supply NA for only n.B flank matches to be known (if there are any).
+#must supply this for simulation so we know to retain left and right known flank individuals with no captures
+data <- sim2flank(N=N,p0L=p0L,p0R=p0R,p0B=p0B,sigma=sigma,K=K,X=X,buff=buff,K2D=K2D,n.fixed=n.fixed)
+n.fixed <- data$n.fixed #update in case n.B > n.fixed (n.B is number of both-side captured individuals)
 #*Do not change* n.fixed from here down because all 0 left and/or right capture histories are retained
 # for n.fixed individuals
 
@@ -79,7 +82,7 @@ str(data$y.B.obs)
 str(data$y.L.obs)
 str(data$y.R.obs)
 
-M=100 #data augmentation level. If N posterior hits M, raise M and start over.
+M <- 100 #data augmentation level. If N posterior hits M, raise M and start over.
 
 #initialize latent states, including flank matches.
 #Can initialize to truth for simulated data for testing purposes.
@@ -88,15 +91,15 @@ M=100 #data augmentation level. If N posterior hits M, raise M and start over.
 #side capture locations. 
 #If n.fixed is NA, will fix flanks for n.B individuals if there are any, will not fix any otherwise
 #plug in n.fixed here if different from n.B
-nimbuild=init.2flank(data=data,M=M,n.fixed=n.fixed,initTrue=FALSE)
+nimbuild <- init.2flank(data=data,M=M,n.fixed=n.fixed,initTrue=FALSE)
 
 #crappy plot
 par(mfrow=c(1,1),ask=FALSE)
 plot(X,pch=4,xlim=nimbuild$xlim,ylim=nimbuild$ylim)
 points(nimbuild$s[nimbuild$z==1,],pch=16)
-y2D=apply(nimbuild$y.true,c(1,2),sum)
+y2D <- apply(nimbuild$y.true,c(1,2),sum)
 for(i in 1:M){
-  trapcaps=which(y2D[i,]>0)
+  trapcaps <- which(y2D[i,]>0)
   for(j in 1:length(trapcaps)){
     lines(x=c(nimbuild$s[i,1],X[trapcaps[j],1]),y=c(nimbuild$s[i,2],X[trapcaps[j],2]))
   }
@@ -111,63 +114,59 @@ Niminits <- list(z=nimbuild$z,s=nimbuild$s,ID.L=nimbuild$ID.L,ID.R=nimbuild$ID.R
                  sigma=sigma,p0S=0.13,psi=0.5,p0B=0.5) #let nimble initialize p0s, don't use true sigma as init, but ballpark start speeds convergence
 
 #constants for Nimble
-n.L=nrow(data$y.L.obs)
-n.R=nrow(data$y.R.obs)
-constants<-list(M=M,J=J,K=K,K2D=K2D,xlim=nimbuild$xlim,ylim=nimbuild$ylim,n.L=n.L,n.R=n.R)
+n.L <- nrow(data$y.L.obs)
+n.R <- nrow(data$y.R.obs)
+constants <- list(M=M,J=J,K=K,K2D=K2D,xlim=nimbuild$xlim,ylim=nimbuild$ylim,n.L=n.L,n.R=n.R)
 
 # Supply data to Nimble. Only individuals with deterministially-matched flanks have known z's.
 if(n.fixed==0){
-  z.data=rep(NA,M)
+  z.data <- rep(NA,M)
 }else{
-  z.data=c(rep(1,n.fixed),rep(NA,M-n.fixed))
+  z.data <- c(rep(1,n.fixed),rep(NA,M-n.fixed))
 }
 #left and right flank data treated as fully latent
 #Known flank matches will not be updated during MCMC.
-Nimdata<-list(y.B.true=nimbuild$y.true[,,,1],y.L.true=array(NA,dim=c(M,J,K)),y.R.true=array(NA,dim=c(M,J,K)),
+Nimdata <- list(y.B.true=nimbuild$y.true[,,,1],y.L.true=array(NA,dim=c(M,J,K)),y.R.true=array(NA,dim=c(M,J,K)),
               ID.L=rep(NA,n.L),ID.R=rep(NA,n.R),z=z.data,X=as.matrix(X))
 
 # set parameters to monitor
 # parameters<-c('psi','p0B','p0L','p0R','sigma','N') #left and right side cap prob not shared
-parameters<-c('psi','p0B','p0S','sigma','N')
-parameters2<-c("ID.L","ID.R")
+parameters <- c('psi','p0B','p0S','sigma','N')
+parameters2 <- c("ID.L","ID.R") #monitor these with different thinning rate
 
 # Build the model, configure the mcmc, and compile
-start.time<-Sys.time()
+start.time <- Sys.time()
 Rmodel <- nimbleModel(code=NimModel, constants=constants, data=Nimdata,check=FALSE,
                       inits=Niminits)
+
+#It's faster to not let nimble configure samplers for y.true. Only requesting nimble configure samplers
+#that are not assigned below. If you add/remove parameters, make changes here.
+config.nodes <- c("p0B","p0S","sigma","psi","z")
 #thinning parameters 2 more to reduce posterior size
-conf <- configureMCMC(Rmodel,monitors=parameters,monitors2=parameters2,thin=1,thin2=5,useConjugacy = TRUE)
+conf <- configureMCMC(Rmodel,monitors=parameters,monitors2=parameters2,
+                      nodes=config.nodes,
+                      thin=1,thin2=5,useConjugacy = TRUE)
 
 ###*required* sampler replacements
-conf$removeSampler("y.L.true")
-conf$removeSampler("y.R.true")
+###Don't need to remove if not assigned by nimble
+# conf$removeSampler("y.L.true")
+# conf$removeSampler("y.R.true")
 conf$addSampler(target = paste0("y.L.true[1:",M,",1:",J,",1:",K,"]"),
                 type = 'IDLSampler',control = list(K2D=K2D,n.fixed=n.fixed,n.L=n.L,prop.scale=1),silent = TRUE)
 conf$addSampler(target = paste0("y.R.true[1:",M,",1:",J,",1:",K,"]"),
                 type = 'IDRSampler',control = list(K2D=K2D,n.fixed=n.fixed,n.R=n.R,prop.scale=1),silent = TRUE)
 ###*optional* sampler replacements:
-#Update activity X and Y locations at the same time. Longer adapt interval than default may be helpful since
-#data assigned to each activity center is constantly updating. Hard to tune.
-conf$removeSampler(paste("s[1:",M,", 1:2]", sep=""))
+#this s sampler only tunes when z=1, draws from prior when z=0
+# conf$removeSampler(paste("s[1:",M,", 1:2]", sep=""))
 for(i in 1:M){
-  conf$addSampler(target = paste("s[",i,", 1:2]", sep=""), #do not adapt covariance bc s's not deterministically linked to individuals
-                  type = 'RW_block',control=list(adaptive=TRUE,adaptScaleOnly=TRUE),silent = TRUE)
+  conf$addSampler(target = paste("s[",i,", 1:2]", sep=""),
+                  type = 'sSampler',control=list(i=i,xlim=nimbuild$xlim,ylim=nimbuild$ylim),silent = TRUE)
 }
 
-#AF slice update can improve mixing substantially when strong covariance between p0x and sigma
-#but it is slower per iter. Typically more useful with sparse data sets? With detection covariates, 
-#you can put AF slice on the p0x and sigma intercepts. Don't replace p0B sampler if no double cam traps
-# conf$removeSampler(c("p0S","sigma"))
-# conf$addSampler(target = c(p0S","sigma"),
-#                 type = 'AF_slice',
-#                 control = list(adaptive=TRUE),
-#                 silent = TRUE)
-#Block RW faster than AF, but mixing worse. May be most efficient?
+#block these is posterior correlation is high. Often will be.
 conf$removeSampler(c("p0S","sigma"))
-conf$addSampler(target = c("p0S","sigma"),
-                type = 'RW_block',
-                control = list(adaptive=TRUE),
-                silent = TRUE)
+conf$addSampler(target = c("p0S","sigma"),type = 'RW_block',
+                control = list(adaptive=TRUE),silent = TRUE)
 
 # Build and compile
 Rmcmc <- buildMCMC(conf)
@@ -176,30 +175,30 @@ Cmodel <- compileNimble(Rmodel)
 Cmcmc <- compileNimble(Rmcmc, project = Rmodel)
 
 # Run the model
-start.time2<-Sys.time()
+start.time2 <- Sys.time()
 #short run for demonstration
-Cmcmc$run(5000,reset=FALSE) #can continue MCMC by rerunning this line with reset=FALSE
-end.time<-Sys.time()
+Cmcmc$run(2500,reset=FALSE) #can continue MCMC by rerunning this line with reset=FALSE
+end.time <- Sys.time()
 end.time-start.time  # total time for compilation, replacing samplers, and fitting
 end.time-start.time2 # post-compilation run time
 
 #extract and plot posterior samples
 library(coda)
-mvSamples=as.matrix(Cmcmc$mvSamples)
+mvSamples <- as.matrix(Cmcmc$mvSamples)
 plot(mcmc(mvSamples[2:nrow(mvSamples),]))
 
 
 #posterior sample match probs. not removing burnin here
-mvSamples2=as.matrix(Cmcmc$mvSamples2)
-postL=mvSamples2[,1:n.L] #which 1:M individual is left flank matched to on each iteration>
-postR=mvSamples2[,(n.L+1):(n.R+n.L)] #same for right flanks
+mvSamples2 <- as.matrix(Cmcmc$mvSamples2)
+postL <- mvSamples2[,1:n.L] #which 1:M individual is left flank matched to on each iteration>
+postR <- mvSamples2[,(n.L+1):(n.R+n.L)] #same for right flanks
 
 #Calculate posterior prob that left flank l matches right flank r
-postprobs=matrix(NA,nrow=n.L,ncol=n.R)
+postprobs <- matrix(NA,nrow=n.L,ncol=n.R)
 for(l in 1:n.L){
   for(r in 1:n.R){
-    tmp=postL[,l]==postR[,r]
-    postprobs[l,r]=mean(tmp[-1])
+    tmp <- postL[,l]==postR[,r]
+    postprobs[l,r] <- mean(tmp[-1])
   }
 }
 
@@ -207,7 +206,7 @@ for(l in 1:n.L){
 #Higher match probs indicate more certainty in matches and less precision lost relative to true data
 #**match probs should be 1 for 1:n.fixed individuals. If not, something went wrong.**
 for(i in 1:n.L){
-  idx=which(data$ID.R==data$ID.L[i])
+  idx <- which(data$ID.R==data$ID.L[i])
   if(length(idx)>0){
     print(postprobs[i,idx])
   }else{
@@ -216,7 +215,7 @@ for(i in 1:n.L){
 }
 #Posterior match probability that right flanks are matched to correct left flanks (for simulated data)
 for(i in 1:n.R){
-  idx=which(data$ID.L==data$ID.R[i])
+  idx <- which(data$ID.L==data$ID.R[i])
   if(length(idx)>0){
     print(postprobs[idx,i])
   }else{
@@ -225,9 +224,9 @@ for(i in 1:n.R){
 }
 
 #posterior for number of matching flank pairs
-n.match=rep(NA,nrow(postL)-1)
+n.match <- rep(NA,nrow(postL)-1)
 for(i in 2:nrow(postL)){
-  n.match[i]=sum(postL[i,]%in%postR[i,])
+  n.match[i] <- sum(postL[i,]%in%postR[i,])
 }
 plot(mcmc(n.match[-1]))
 sum(data$ID.L%in%data$ID.R) #truth

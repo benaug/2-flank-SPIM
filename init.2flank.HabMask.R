@@ -4,7 +4,17 @@ e2dist<-function (x, y){
   matrix(dvec, nrow = nrow(x), ncol = nrow(y), byrow = F)
 }
 
-init.2flank <- function(data=data,M=M,n.fixed=NA,initTrue=FALSE){
+getCellR = function(u,res,cells,xlim,ylim){
+  inout=1*(u[1]>xlim[1]&u[1]<xlim[2]&u[2]>ylim[1]&u[2]<ylim[2])
+  if(inout==1){
+    this.cell=cells[trunc(u[1]/res)+1,trunc(u[2]/res)+1]
+  }else{
+    this.cell=0
+  }
+  return(this.cell)
+}
+
+init.2flank.HabMask <- function(data=data,M=M,n.fixed=NA,initTrue=FALSE){
   J <- dim(data$y.L.obs)[2]
   K <- dim(data$y.L.obs)[3]
   X <- data$X
@@ -111,7 +121,8 @@ init.2flank <- function(data=data,M=M,n.fixed=NA,initTrue=FALSE){
     }
   }
   
-  #initialize s
+  #initialize s inside habitat mask
+  list2env(data$grid.objects, envir = .GlobalEnv)
   X <- as.matrix(data$X)
   xlim <- range(X[,1])+c(-data$buff,data$buff)
   ylim <- range(X[,2])+c(-data$buff,data$buff)
@@ -125,6 +136,16 @@ init.2flank <- function(data=data,M=M,n.fixed=NA,initTrue=FALSE){
       }else{
         s[i,] <- X[idx,]
       }
+    }
+  }
+  #move any initialized outside state space
+  for(i in 1:M){
+    s.cell <- getCellR(s[i,],res,cells,xlim,ylim)
+    if(InSS[s.cell]==0){#not in SS, move to nearest cell
+      dists <- sqrt((dSS[s.cell,1]-dSS[,1])^2+(dSS[s.cell,2]-dSS[,2])^2)
+      dists[InSS==0] <- Inf
+      pick <- which(dists==min(dists))[1] #if more than 1, just use first
+      s[i,] <- dSS[pick,]
     }
   }
   #initialize z to only captured individuals. Can let nimble initialize z if you want.

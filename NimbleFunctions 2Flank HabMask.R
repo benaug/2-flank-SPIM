@@ -1,3 +1,22 @@
+dCell <- nimbleFunction(
+  run = function(x = double(0), InSS = integer(0),log = integer(0)) {
+    returnType(double(0))
+    if(InSS==1){
+      logProb <- 0
+    }else{
+      logProb <- -Inf
+    }
+    return(logProb)
+  }
+)
+#make dummy random number generator to make nimble happy
+rCell <- nimbleFunction(
+  run = function(n = integer(0),InSS = integer(0)) {
+    returnType(double(0))
+    return(0)
+  }
+)
+
 IDdummyfun <- nimbleFunction(
   run = function(ID.L=double(1),ID.R=double(1)){ 
     returnType(double(0))
