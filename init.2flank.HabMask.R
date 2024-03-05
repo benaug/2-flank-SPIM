@@ -124,8 +124,6 @@ init.2flank.HabMask <- function(data=data,M=M,n.fixed=NA,initTrue=FALSE){
   #initialize s inside habitat mask
   list2env(data$grid.objects, envir = .GlobalEnv)
   X <- as.matrix(data$X)
-  xlim <- range(X[,1])+c(-data$buff,data$buff)
-  ylim <- range(X[,2])+c(-data$buff,data$buff)
   s <- cbind(runif(M,xlim[1],xlim[2]),runif(M,ylim[1],ylim[2]))
   y.true2D <- apply(y.true,c(1,2),sum)
   for(i in 1:M){
