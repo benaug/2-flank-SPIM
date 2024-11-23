@@ -43,7 +43,7 @@ GetDetectionProb <- nimbleFunction(
     pd <- rep(0,J)
     if(z==0) return(pd)
     if(z==1){
-      pd <-p0*exp(-d2/(2*sigma^2))
+      pd <- p0*exp(-d2/(2*sigma^2))
       return(pd)
     }
   }
